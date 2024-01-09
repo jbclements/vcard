@@ -9,6 +9,8 @@
 ;; the outer list is because there can be multiple instances of the
 ;; same key; the inner one is because fields can be multiple lines.
 
+(define christmas-vcf-path (build-path "/Users/clements/git-clements/addresses/christmas-2023.vcf"))
+
 (define (card-name c) (first (hash-ref c "N")))
 
 (define (file->unique-named-cards filename)
@@ -87,7 +89,7 @@
   unique-named-cards)
 
 ;(define all-cards (file->unique-named-cards "/tmp/all-cards.vcf"))
-(define cc-cards (file->unique-named-cards "/tmp/christmas.vcf"))
+(define cc-cards (file->unique-named-cards christmas-vcf-path))
 
 ;(define all-card-names (map card-name all-cards))
 (define cc-card-names (map card-name cc-cards))
