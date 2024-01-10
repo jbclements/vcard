@@ -164,13 +164,14 @@
   #:exists 'truncate
   (λ (port)
     (display-table
+     (cons (list "name" "street" "rest")
      (filter
       (λ (row) (string? (first row)))
       (map
        (λ (card)
          (cons (name-render (hash-ref card "FN"))
                (address-line-split (find-address card))))
-       cc-cards))
+       cc-cards)))
      port)))
 
 #;(unless (subset? cc-card-names all-card-names)
@@ -206,3 +207,14 @@
 
 
 
+;; page printing instructions:
+;; - open microsoft word
+;; - Mailings > Start Mail Merge > Labels ...
+;; - Avery 5160, click ok
+;; select recipients > use existing list
+;; select csv file
+;; Use Insert Merge Field 3x to insert the 3 rows
+;; Click "Update Labels"
+;; Click "preview"
+;; Finish & Merge > Print Documents ...
+;; (figure out how to load paper correctly)
