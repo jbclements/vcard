@@ -2,14 +2,15 @@
 
 (require sugar
          csv-writing
-         "address-hints-private.rkt"
+         scramble/regexp
+         #;"address-hints-private.rkt"
          "name-hints-private.rkt")
 
 ;; a vcard is a hash from strings to lists of lists of strings.
 ;; the outer list is because there can be multiple instances of the
 ;; same key; the inner one is because fields can be multiple lines.
 
-(define christmas-vcf-path (build-path "/Users/clements/git-clements/addresses/christmas-2023.vcf"))
+(define christmas-vcf-path (build-path "/Users/clements/git-clements/addresses/christmas-2024.vcf"))
 
 (define (card-name c) (first (hash-ref c "N")))
 
@@ -91,49 +92,53 @@
 ;(define all-cards (file->unique-named-cards "/tmp/all-cards.vcf"))
 (define cc-cards (file->unique-named-cards christmas-vcf-path))
 
+
+
 ;(define all-card-names (map card-name all-cards))
 (define cc-card-names (map card-name cc-cards))
 
-(define (find-all-addresses card)
-  (define maybe-address-keys
-    
-    (filter (λ (s)
-              (and (regexp-match? #px"ADR" s)
-                   (not (regexp-match #px"^item[0-9]+\\.X-ABADR$" s))))
-            (hash-keys card)))
-  (apply
-   append
-   (apply
-    append
-    (map second
-         (for/list ([k (in-list maybe-address-keys)])
-           (list k (hash-ref card k)))))))
+(define-RE dot (inject "."))
+
+(define (find-main-address card)
+  (define possible-key-pairs
+    (filter-map
+     (λ (key)
+       (define split (regexp-split (px ";") key))
+       (define f (first split))
+       (and (or (equal? f "ADR")
+                (regexp-match (px ".ADR" $) f))
+            (list key
+                  (map (λ (f)
+                         (match f
+                           [(regexp (px ^ "type=" (report (* dot)) $) (list _ ty))
+                            ty]
+                           [other (error 'BADPARSE)]))
+                       (rest split)))))
+     (hash-keys card)))
+  (define home-keys
+    (filter (λ (pr)
+              (and (subset? '("HOME") (second pr))))
+            possible-key-pairs))
+  (match home-keys
+    [(list) (list 'NOHOME possible-key-pairs)]
+    [(list (list key _)) (hash-ref card key)]
+    [other (list '2HOMES other)]))
+
+(map (λ (card)
+       (list (card-name card)
+             (find-main-address card)))
+     cc-cards)
+
 
 (define (undo-string-quotes s)
   (regexp-replace* #px"\\\\," s ","))
 
 (define (find-address card)
-  (define addresses
-    (find-all-addresses card))
-  (undo-string-quotes
-   (match addresses
-     ['() ""]
-     [(list just-one-address) just-one-address]
-     [multiple-addresses
-      (match (hash-ref card "FN")
-        [(list (list full-name))
-         (match (assoc full-name address-hints)
-           [(list _ addr-hint)
-            (match (filter (λ (address)
-                             (string-contains? address addr-hint))
-                           multiple-addresses)
-              [(list single-address) single-address]
-              [other (error 'find-address "hint matched more than one address: ~e"
-                            other)])]
-           [#f (error 'find-address "no hint for name ~e with multiple addresses"
-                      full-name)])]
-        [other (error 'zzz "moreinfo")])
-      ])))
+  (define main-address (find-main-address card))
+  (match main-address
+    [(cons 'NOHOME _) #f]
+    [(list (list (? string? s)))
+     (undo-string-quotes s)]))
 
 (define (address-line-split addr)
   (match (regexp-split #px";" addr)
@@ -169,8 +174,9 @@
       (λ (row) (string? (first row)))
       (map
        (λ (card)
+         (define addr (find-address card))
          (cons (name-render (hash-ref card "FN"))
-               (address-line-split (find-address card))))
+               (and addr (address-line-split addr))))
        cc-cards)))
      port)))
 
